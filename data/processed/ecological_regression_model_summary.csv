@@ -1,0 +1,2 @@
+outcome,model_type,covariance_estimator,n_observations,n_countries,year_min,year_max,r_squared,adj_r_squared,aic,bic,f_statistic,f_pvalue,predictors_used,optional_predictor_note
+log_mmr,OLS,HC3,2823,153,2000,2022,0.7253961096744039,0.7249087048282457,6756.878089614102,6792.551422183623,1964.4297350226857,0.0,log_gdp_per_capita;female_literacy_rate;health_expenditure_per_capita;urban_population_pct;skilled_birth_attendance,skilled_birth_attendance included: 76.4% coverage met threshold 65.0%.

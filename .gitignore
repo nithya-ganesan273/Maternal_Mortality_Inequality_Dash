@@ -9,11 +9,16 @@ __pycache__/
 htmlcov/
 .env
 
-# Runtime data artifacts
+# Runtime data artifacts.
+#
+# Raw and interim frames stay out of git: they are large, and `run_pipeline.py`
+# rebuilds them from the World Bank API, which is the source of truth.
+#
+# data/processed/ IS committed on purpose (under 1 MB). Without it a fresh clone
+# has to install 15 dependencies and successfully reach the World Bank API
+# before the dashboard will render anything at all.
 data/raw/*.parquet
 data/interim/*.parquet
-data/processed/*.parquet
-data/processed/*.json
 logs/*.log
 
 # Keep directory placeholders

@@ -1,0 +1,7 @@
+variable,vif,high_multicollinearity_flag
+const,82.27997868903299,True
+log_gdp_per_capita,4.606103149171981,False
+female_literacy_rate,3.1096678145889145,False
+health_expenditure_per_capita,2.402528579030974,False
+urban_population_pct,2.1534633996116272,False
+skilled_birth_attendance,3.9813894061463135,False

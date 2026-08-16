@@ -1,0 +1,46 @@
+{
+  "country_coverage": {
+    "clean_unique_countries": 194,
+    "raw_unique_countries": 217
+  },
+  "ecological_regression": {
+    "adj_r_squared": 0.7249087048282457,
+    "coefficients_path": "data\\processed\\ecological_regression_coefficients.csv",
+    "covariance_estimator": "HC3",
+    "model_summary_csv_path": "data\\processed\\ecological_regression_model_summary.csv",
+    "model_summary_text_path": "data\\processed\\ecological_regression_model_summary.txt",
+    "n_observations": 2823,
+    "predictors_used": [
+      "log_gdp_per_capita",
+      "female_literacy_rate",
+      "health_expenditure_per_capita",
+      "urban_population_pct",
+      "skilled_birth_attendance"
+    ],
+    "qq_plot_path": "data\\processed\\ecological_regression_residuals_qq_plot.png",
+    "r_squared": 0.7253961096744039,
+    "residuals_vs_fitted_plot_path": "data\\processed\\ecological_regression_residuals_vs_fitted.png",
+    "vif_path": "data\\processed\\ecological_regression_vif.csv"
+  },
+  "generated_at_utc": "2026-08-16T12:23:26.454086+00:00",
+  "input_signature_sha256": "c640116241b9a36c4010bb2359e24c786d7a4d60ffaa6e09625f135e6e8c9643",
+  "pipeline_window": {
+    "end_year": 2023,
+    "start_year": 2000
+  },
+  "row_counts": {
+    "clean_country_year_panel": 4656,
+    "income_group_summary": 96,
+    "raw_indicator_panel": 36456,
+    "yearly_inequality": 24
+  },
+  "source_indicators": {
+    "female_literacy_rate": "SE.ADT.LITR.FE.ZS",
+    "female_secondary_completion": "SE.SEC.CUAT.LO.FE.ZS",
+    "gdp_per_capita": "NY.GDP.PCAP.CD",
+    "health_expenditure_per_capita": "SH.XPD.CHEX.PC.CD",
+    "mmr": "SH.STA.MMRT",
+    "skilled_birth_attendance": "SH.STA.BRTC.ZS",
+    "urban_population_pct": "SP.URB.TOTL.IN.ZS"
+  }
+}

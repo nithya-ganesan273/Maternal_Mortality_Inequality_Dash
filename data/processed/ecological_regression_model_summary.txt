@@ -1,0 +1,52 @@
+Ecological regression for maternal mortality inequality
+Outcome: log-transformed maternal mortality ratio (log_mmr)
+Predictors used: log_gdp_per_capita, female_literacy_rate, health_expenditure_per_capita, urban_population_pct, skilled_birth_attendance
+Optional predictor rule: skilled_birth_attendance included: 76.4% coverage met threshold 65.0%.
+
+Epidemiologic interpretation guidance:
+- Associations are ecological (country-year) and may reflect structural confounding.
+- Coefficients describe adjusted average directional relationships, not causal effects.
+- For log-log terms, coefficients are elasticities.
+- For log-linear terms, 100 x beta approximates percent change in MMR per unit change.
+
+Model summary:
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:                log_mmr   R-squared:                       0.725
+Model:                            OLS   Adj. R-squared:                  0.725
+Method:                 Least Squares   F-statistic:                     1964.
+Date:                Sun, 16 Aug 2026   Prob (F-statistic):               0.00
+Time:                        17:53:24   Log-Likelihood:                -3372.4
+No. Observations:                2823   AIC:                             6757.
+Df Residuals:                    2817   BIC:                             6793.
+Df Model:                           5                                         
+Covariance Type:                  HC3                                         
+=================================================================================================
+                                    coef    std err          z      P>|z|      [0.025      0.975]
+-------------------------------------------------------------------------------------------------
+const                             9.4141      0.124     75.872      0.000       9.171       9.657
+log_gdp_per_capita               -0.2287      0.023    -10.003      0.000      -0.274      -0.184
+female_literacy_rate             -0.0162      0.001    -18.052      0.000      -0.018      -0.014
+health_expenditure_per_capita    -0.0006   4.46e-05    -12.977      0.000      -0.001      -0.000
+urban_population_pct             -0.0018      0.001     -1.906      0.057      -0.004    5.08e-05
+skilled_birth_attendance         -0.0199      0.001    -19.165      0.000      -0.022      -0.018
+==============================================================================
+Omnibus:                       43.308   Durbin-Watson:                   0.144
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):               65.647
+Skew:                          -0.155   Prob(JB):                     5.56e-15
+Kurtosis:                       3.680   Cond. No.                     5.89e+03
+==============================================================================
+
+Notes:
+[1] Standard Errors are heteroscedasticity robust (HC3)
+[2] The condition number is large, 5.89e+03. This might indicate that there are
+strong multicollinearity or other numerical problems.
+
+Variance inflation factors (multicollinearity check):
+                     variable       vif  high_multicollinearity_flag
+                        const 82.279979                         True
+           log_gdp_per_capita  4.606103                        False
+         female_literacy_rate  3.109668                        False
+health_expenditure_per_capita  2.402529                        False
+         urban_population_pct  2.153463                        False
+     skilled_birth_attendance  3.981389                        False
