@@ -238,9 +238,10 @@ def _dashboard_content(
                     ),
                     html.P(
                         (
-                            "Scenario predictions are generated from the fitted ecological regression model. "
-                            "Sliders modify selected predictors while holding GDP per capita and urban population "
-                            "at the selected country-year baseline."
+                            "Starts from the selected country-year's observed mortality and applies "
+                            "within-country regression coefficients to whatever the sliders change. "
+                            "This estimates how this country's own mortality would move, rather than "
+                            "what a different country with these characteristics would look like."
                         ),
                         style={"marginTop": 0, "color": "#57606A"},
                     ),
@@ -296,8 +297,10 @@ def _dashboard_content(
                     html.Div(
                         style={"display": "flex", "flexWrap": "wrap", "gap": "12px"},
                         children=[
-                            _scenario_result_card("Baseline predicted MMR", "scenario-baseline-mmr"),
-                            _scenario_result_card("Adjusted predicted MMR", "scenario-adjusted-mmr"),
+                            # "Observed", not "predicted": the baseline is the country's
+                            # actual reported MMR, so the card must not imply a model estimate.
+                            _scenario_result_card("Observed MMR (baseline)", "scenario-baseline-mmr"),
+                            _scenario_result_card("Adjusted MMR (modelled)", "scenario-adjusted-mmr"),
                             _scenario_result_card("Percent change vs baseline", "scenario-percent-change"),
                         ],
                     ),

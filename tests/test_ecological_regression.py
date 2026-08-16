@@ -158,3 +158,57 @@ def test_ecological_regression_enforces_minimum_observations(tmp_path: Path) -> 
             minimum_observations=100,
             optional_predictor_min_coverage=0.5,
         )
+
+
+def test_specification_comparison_covers_all_specifications() -> None:
+    """
+    The robustness table must report every predictor under every specification.
+
+    This is the artifact that lets a reader check whether a coefficient survives
+    within-country identification or only exists in the cross-section.
+    """
+    import pandas as pd
+
+    from maternal_mortality_dashboard.modeling.ecological_regression import (
+        SPEC_COUNTRY_FE,
+        SPEC_POOLED_CLUSTER,
+        SPEC_POOLED_HC3,
+        SPEC_TWOWAY_FE,
+    )
+
+    path = Path("data/processed/ecological_regression_specification_comparison.csv")
+    if not path.exists():
+        pytest.skip("pipeline artifacts not built; run scripts/run_pipeline.py")
+
+    frame = pd.read_csv(path)
+    expected = {SPEC_POOLED_HC3, SPEC_POOLED_CLUSTER, SPEC_COUNTRY_FE, SPEC_TWOWAY_FE}
+    assert expected.issubset(set(frame["specification"]))
+
+    # Pooled HC3 and pooled clustered differ only in their standard errors:
+    # identical point estimates, but clustering must never shrink the error.
+    hc3 = frame[frame["specification"] == SPEC_POOLED_HC3].set_index("term")
+    clustered = frame[frame["specification"] == SPEC_POOLED_CLUSTER].set_index("term")
+    for term in hc3.index:
+        assert hc3.loc[term, "coefficient"] == pytest.approx(
+            clustered.loc[term, "coefficient"]
+        )
+        assert clustered.loc[term, "std_error"] >= hc3.loc[term, "std_error"] * 0.99
+
+
+def test_fixed_effects_absorb_between_country_variation() -> None:
+    """Country fixed effects should raise R-squared substantially: MMR is persistent."""
+    import pandas as pd
+
+    from maternal_mortality_dashboard.modeling.ecological_regression import (
+        SPEC_COUNTRY_FE,
+        SPEC_POOLED_CLUSTER,
+    )
+
+    path = Path("data/processed/ecological_regression_specification_comparison.csv")
+    if not path.exists():
+        pytest.skip("pipeline artifacts not built; run scripts/run_pipeline.py")
+
+    frame = pd.read_csv(path)
+    pooled_r2 = frame[frame["specification"] == SPEC_POOLED_CLUSTER]["r_squared"].iloc[0]
+    fe_r2 = frame[frame["specification"] == SPEC_COUNTRY_FE]["r_squared"].iloc[0]
+    assert fe_r2 > pooled_r2

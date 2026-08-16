@@ -22,7 +22,7 @@
     "residuals_vs_fitted_plot_path": "data\\processed\\ecological_regression_residuals_vs_fitted.png",
     "vif_path": "data\\processed\\ecological_regression_vif.csv"
   },
-  "generated_at_utc": "2026-08-16T12:23:26.454086+00:00",
+  "generated_at_utc": "2026-08-16T14:20:46.166273+00:00",
   "input_signature_sha256": "c640116241b9a36c4010bb2359e24c786d7a4d60ffaa6e09625f135e6e8c9643",
   "pipeline_window": {
     "end_year": 2023,

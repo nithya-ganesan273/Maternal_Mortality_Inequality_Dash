@@ -100,29 +100,56 @@ precise counts.*
 
 ## What predicts maternal mortality
 
-Ecological OLS on `log(MMR)`, HC3 robust standard errors, 2,823 country-year
-observations across 153 countries, **R² = 0.725**.
+Ecological regression on `log(MMR)`, 2,823 country-year observations across 153
+countries. **The specification matters more than the result**, so all four are
+reported rather than the flattering one.
 
-| Predictor | Coefficient | Robust SE | p | Interpretation |
-|---|---|---|---|---|
-| **Skilled birth attendance** | −0.0199 | 0.0010 | 7e−82 | Each +1pp → **−2.0%** MMR |
-| **Female literacy rate** | −0.0162 | 0.0009 | 8e−73 | Each +1pp → **−1.6%** MMR |
-| log GDP per capita | −0.2287 | 0.0229 | 1e−23 | +1% GDP → −0.23% MMR |
-| Health expenditure per capita | −0.00058 | 0.00005 | 2e−38 | +$100 → −5.6% MMR |
-| Urban population % | −0.0018 | 0.0009 | **0.057** | **not significant** |
+Two corrections drive everything below:
 
-Two things stand out. **Urbanisation is the only predictor that fails
-significance** — being city-dwelling does not itself protect mothers. And the two
-strongest effects are not wealth but *service delivery and women's education*:
-whether a trained attendant is present at birth, and whether women can read.
+1. **Standard errors are clustered by country.** 2,823 country-years are not
+   independent — each country contributes up to 23 heavily autocorrelated rows.
+   HC3 corrects heteroskedasticity only, and understated the uncertainty
+   dramatically (it put GDP's p-value at 1e−23; clustered, it is 0.002).
+2. **Fixed effects change the question.** Pooled coefficients are identified by
+   differences *between* rich and poor countries. Country fixed effects identify
+   from change *within* a country over time, which is what any policy claim
+   actually needs.
 
-That distinction matters for policy. GDP is the hardest thing to change quickly;
-skilled birth attendance is the most directly actionable.
+| Predictor | Pooled + clustered | Country + year FE | Survives? |
+|---|---|---|---|
+| **log GDP per capita** | −0.229 (p=0.002) | **−0.264 (p=7e−09)** | ✅ **strengthens** |
+| **Skilled birth attendance** | −0.020 (p=8e−08) | **−0.005 (p=0.005)** | ✅ **survives, ~4× smaller** |
+| Female literacy rate | −0.016 (p=3e−06) | −0.007 (p=**0.10**) | ❌ **does not survive** |
+| Health expenditure per capita | −0.0006 (p=2e−05) | −0.00007 (p=**0.20**) | ❌ **does not survive** |
+| Urban population % | −0.002 (p=0.62) | +0.004 (p=0.31) | ❌ never significant |
 
-All predictor VIFs sit between **2.15 and 4.61** — below the multicollinearity
-threshold of 5 — so these estimates are not fighting each other for the same
-variance. (The VIF table also reports the intercept at 82.3 and flags it; that is
-expected and meaningless for a constant term, not a modelling problem.)
+**The headline finding is what does *not* survive.** Female literacy looks like
+one of the strongest predictors in the cross-section — countries where more women
+can read have far lower maternal mortality — but that association is entirely
+*between* countries. Once you ask whether a country that improved literacy saw
+its own mortality fall faster, the effect drops by more than half and loses
+significance. The same is true of health expenditure.
+
+Only two relationships hold within countries over time: **GDP per capita** and
+**skilled birth attendance**. Of those, skilled birth attendance is the directly
+actionable one — and its honest effect size is about **−0.5% MMR per percentage
+point**, not the −2.0% the pooled model suggests.
+
+Country fixed effects lift R² from 0.725 to 0.985, confirming that most of the
+variation is permanent differences between countries rather than anything these
+time-varying predictors explain.
+
+> **A caveat in the other direction:** fixed effects are demanding on
+> slow-moving regressors. Female literacy barely changes within a country across
+> 23 years, so there is little within-country variation left to identify an
+> effect from. "Does not survive FE" here means *not demonstrated*, not
+> *disproven* — the honest reading is that this design cannot settle it.
+
+All predictor VIFs sit between **2.15 and 4.61**, below the multicollinearity
+threshold of 5. (The VIF table also reports the intercept at 82.3 and flags it;
+that is expected and meaningless for a constant term.)
+
+Full output: [`ecological_regression_specification_comparison.csv`](data/processed/ecological_regression_specification_comparison.csv).
 
 ---
 
@@ -133,21 +160,33 @@ expenditure, or skilled birth attendance and see the model's adjusted prediction
 
 ![Scenario simulator](assets/screenshots/scenario.png)
 
-From the baseline shown above (Afghanistan 2023, predicted MMR 562), holding all
-other predictors fixed:
+The panel anchors on the selected country's **observed** mortality and applies
+**within-country** coefficients to whatever the sliders change:
 
-| Change | Predicted MMR | Change |
-|---|---|---|
-| Skilled birth attendance 60% → 90% | 310 | **−44.9%** |
-| Female literacy 15% → 60% | 271 | **−51.8%** |
-| Health expenditure $30 → $200 | 510 | −9.4% |
+```
+adjusted MMR = observed MMR × exp(β_within × Δx)
+```
 
-Because the model is log-linear, the *percentage* changes hold from any baseline;
-only the absolute values depend on the starting country-year.
+| Change | Effect on MMR |
+|---|---|
+| Skilled birth attendance +30pp | **−13.7%** |
+| Female literacy +45pp | −26.2% *(not significant under FE)* |
+| Health expenditure +$170 | −1.1% *(not significant under FE)* |
 
-These are **model extrapolations from cross-country associations, not causal
-forecasts.** The dashboard labels the panel `Ecological model — non-causal` for
-exactly this reason.
+Because the outcome is log-linear, these percentages hold from any starting
+level; only the absolute values depend on the country-year.
+
+> **This used to be wrong, and it is worth being explicit about why.** The panel
+> previously predicted an *absolute* MMR from the pooled model's intercept, which
+> answers "what would a country with these characteristics look like" — a
+> between-country comparison — while the sliders ask "what if **this** country
+> changed". That is precisely the ecological fallacy the dashboard's own Methods
+> tab warns against. It also overstated every effect by 3–4×: the same skilled
+> birth attendance change read as **−44.9%** instead of −13.7%.
+
+These remain **associations, not causal forecasts**, and two of the three sliders
+move predictors that do not survive fixed effects. The dashboard labels the panel
+`Ecological model — non-causal` for this reason.
 
 ---
 
@@ -166,10 +205,20 @@ any mother who died.
 
 Other limits worth stating plainly:
 
-- **MMR values are modelled estimates**, not registry counts, and are revised
-  retrospectively. Countries with weak vital registration have wide uncertainty.
-- **No fixed effects.** The model pools country-years without controlling for
-  country identity, so between-country differences carry the estimates.
+- **The outcome may be partly circular, and this is the deepest issue here.**
+  World Bank MMR figures are not observed counts — they are **MMEIG model
+  estimates**, and that model uses GDP per capita, skilled birth attendance and
+  fertility as covariates to impute mortality for countries lacking complete
+  vital registration, which is most of them. Regressing this outcome on GDP and
+  skilled birth attendance may therefore partly recover the imputation model
+  rather than an independent relationship, inflating R². The clean test is to
+  restrict to countries with complete registration; that requires an external
+  data-quality classification the World Bank API does not expose, so it is
+  **not resolved here** — see the open issues.
+- **Reverse causality is unaddressed.** Health expenditure and mortality are
+  plausibly co-determined, and nothing in this design breaks that loop.
+- MMR estimates are **revised retrospectively**, so re-running the pipeline in a
+  later year will change historical figures.
 - **`skilled_birth_attendance` has 76.4% coverage** — included because it clears
   the configured 65% threshold, but it is the sparsest predictor in the model.
 - **Female secondary completion is extracted but not modelled**; it is used for

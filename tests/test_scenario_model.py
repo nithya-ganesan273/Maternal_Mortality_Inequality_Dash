@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import math
+
 import pandas as pd
+import pytest
 
 from maternal_mortality_dashboard.dashboard.scenario_model import predict_adjusted_mmr
 
@@ -123,3 +126,72 @@ def test_predict_adjusted_mmr_returns_none_when_gdp_non_positive() -> None:
 
     assert prediction.adjusted_mmr is None
     assert prediction.percent_change is None
+
+
+def test_within_country_scenario_anchors_on_observed_mmr() -> None:
+    """
+    When the row carries an observed MMR, the baseline must be that value.
+
+    Predicting an absolute level from the model intercept instead would answer a
+    between-country question ("what would a country like this look like") while
+    the sliders ask a within-country one ("what if this country changed").
+    """
+    row = pd.Series(
+        {
+            "mmr": 400.0,
+            "gdp_per_capita": 1200.0,
+            "female_literacy_rate": 50.0,
+            "health_expenditure_per_capita": 40.0,
+            "skilled_birth_attendance": 60.0,
+            "urban_population_pct": 40.0,
+        }
+    )
+    prediction = predict_adjusted_mmr(
+        row=row,
+        coefficient_table=_coefficient_table(include_skilled=True),
+        literacy_value=50.0,
+        health_expenditure_value=40.0,
+        skilled_birth_value=60.0,
+        fallback_literacy=50.0,
+        fallback_health_expenditure=40.0,
+        fallback_skilled_birth=60.0,
+    )
+
+    assert prediction.baseline_mmr == 400.0
+    # No slider moved, so the adjusted value must equal the baseline exactly.
+    assert prediction.adjusted_mmr == pytest.approx(400.0)
+    assert prediction.percent_change == pytest.approx(0.0)
+
+
+def test_within_country_percent_change_is_baseline_independent() -> None:
+    """
+    log-linear outcome => the same slider change is the same percentage change.
+
+    Two countries with very different mortality must show an identical percent
+    change for an identical intervention.
+    """
+    def predict(observed: float):
+        row = pd.Series(
+            {
+                "mmr": observed,
+                "female_literacy_rate": 50.0,
+                "health_expenditure_per_capita": 40.0,
+                "skilled_birth_attendance": 60.0,
+            }
+        )
+        return predict_adjusted_mmr(
+            row=row,
+            coefficient_table=_coefficient_table(include_skilled=True),
+            literacy_value=50.0,
+            health_expenditure_value=40.0,
+            skilled_birth_value=90.0,
+            fallback_literacy=50.0,
+            fallback_health_expenditure=40.0,
+            fallback_skilled_birth=60.0,
+        )
+
+    low, high = predict(80.0), predict(800.0)
+    assert low.percent_change == pytest.approx(high.percent_change)
+    assert low.percent_change < 0
+    # exp(-0.006 * 30) - 1
+    assert low.percent_change == pytest.approx((math.exp(-0.006 * 30) - 1) * 100)

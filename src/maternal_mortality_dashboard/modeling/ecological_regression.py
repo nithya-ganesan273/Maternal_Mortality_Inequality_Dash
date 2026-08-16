@@ -26,6 +26,13 @@ BASE_PREDICTORS = [
 OPTIONAL_PREDICTOR = "skilled_birth_attendance"
 
 
+# Specification labels used in the robustness comparison.
+SPEC_POOLED_HC3 = "pooled_hc3"
+SPEC_POOLED_CLUSTER = "pooled_cluster_country"
+SPEC_COUNTRY_FE = "country_fe_cluster"
+SPEC_TWOWAY_FE = "country_year_fe_cluster"
+
+
 @dataclass(frozen=True)
 class EcologicalRegressionArtifacts:
     regression_dataset_path: Path
@@ -35,6 +42,8 @@ class EcologicalRegressionArtifacts:
     vif_path: Path
     residuals_vs_fitted_plot_path: Path
     qq_plot_path: Path
+    specification_comparison_path: Path
+    within_country_coefficients_path: Path
 
 
 @dataclass(frozen=True)
@@ -122,6 +131,87 @@ def _resolve_model_specification(
     return model_frame, predictors, optional_note
 
 
+def _fit_specifications(
+    model_frame: pd.DataFrame, predictors: list[str]
+) -> dict[str, sm.regression.linear_model.RegressionResultsWrapper]:
+    """
+    Fit the same predictors under four error/identification assumptions.
+
+    Why this exists: a pooled OLS with HC3 errors treats 2,823 country-years as
+    independent observations. They are not - each country contributes up to 23
+    highly autocorrelated rows, so HC3 (which corrects heteroskedasticity only)
+    understates the standard errors badly and produces implausible p-values.
+
+    The four specifications separate two distinct questions:
+
+    * ``pooled_hc3`` / ``pooled_cluster_country`` - identical coefficients,
+      different uncertainty. The cluster version is the honest one.
+    * ``country_fe_cluster`` - adds country dummies, so coefficients are
+      identified from *within-country change over time* rather than from
+      differences between rich and poor countries. This is the specification
+      that matches a counterfactual like "if this country raised skilled birth
+      attendance", which is what the dashboard's scenario panel asks.
+    * ``country_year_fe_cluster`` - adds year dummies too, absorbing global
+      shocks common to all countries (the 2020-21 pandemic being the obvious
+      one).
+
+    Coefficients that survive fixed effects are far more defensible than
+    coefficients that only appear in the cross-section.
+    """
+    groups = model_frame["country_iso3"]
+    outcome = model_frame["log_mmr"]
+    cluster = {"groups": groups}
+
+    base = sm.add_constant(model_frame[predictors], has_constant="add")
+    fitted: dict[str, sm.regression.linear_model.RegressionResultsWrapper] = {}
+    fitted[SPEC_POOLED_HC3] = sm.OLS(outcome, base).fit(cov_type="HC3")
+    fitted[SPEC_POOLED_CLUSTER] = sm.OLS(outcome, base).fit(
+        cov_type="cluster", cov_kwds=cluster
+    )
+
+    country_dummies = pd.get_dummies(groups, prefix="cty", drop_first=True, dtype=float)
+    with_country = pd.concat([base, country_dummies.set_index(base.index)], axis=1)
+    fitted[SPEC_COUNTRY_FE] = sm.OLS(outcome, with_country).fit(
+        cov_type="cluster", cov_kwds=cluster
+    )
+
+    year_dummies = pd.get_dummies(
+        model_frame["year"], prefix="yr", drop_first=True, dtype=float
+    )
+    with_both = pd.concat([with_country, year_dummies.set_index(base.index)], axis=1)
+    fitted[SPEC_TWOWAY_FE] = sm.OLS(outcome, with_both).fit(
+        cov_type="cluster", cov_kwds=cluster
+    )
+    return fitted
+
+
+def _specification_comparison(
+    fitted: dict[str, sm.regression.linear_model.RegressionResultsWrapper],
+    predictors: list[str],
+) -> pd.DataFrame:
+    """One row per (specification, predictor) so the sensitivity is auditable."""
+    rows: list[dict[str, object]] = []
+    for label, results in fitted.items():
+        for term in predictors:
+            if term not in results.params.index:
+                continue
+            rows.append(
+                {
+                    "specification": label,
+                    "term": term,
+                    "coefficient": float(results.params[term]),
+                    "std_error": float(results.bse[term]),
+                    "p_value": float(results.pvalues[term]),
+                    "ci_lower_95": float(results.conf_int().loc[term, 0]),
+                    "ci_upper_95": float(results.conf_int().loc[term, 1]),
+                    "significant_at_05": bool(results.pvalues[term] < 0.05),
+                    "n_observations": int(results.nobs),
+                    "r_squared": float(results.rsquared),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def _compute_vif_table(design_matrix: pd.DataFrame) -> pd.DataFrame:
     vif_rows: list[dict[str, float | str]] = []
     values = design_matrix.to_numpy(dtype=float)
@@ -202,6 +292,8 @@ def _build_artifact_paths(output_dir: Path) -> EcologicalRegressionArtifacts:
         vif_path=output_dir / "ecological_regression_vif.csv",
         residuals_vs_fitted_plot_path=output_dir / "ecological_regression_residuals_vs_fitted.png",
         qq_plot_path=output_dir / "ecological_regression_residuals_qq_plot.png",
+        specification_comparison_path=output_dir / "ecological_regression_specification_comparison.csv",
+        within_country_coefficients_path=output_dir / "ecological_regression_within_country_coefficients.csv",
     )
 
 
@@ -232,8 +324,13 @@ def run_ecological_regression(
         )
 
         design_matrix = sm.add_constant(model_frame[predictors], has_constant="add")
-        model = sm.OLS(model_frame["log_mmr"], design_matrix)
-        results = model.fit(cov_type="HC3")
+
+        # Fit every specification, then report the cluster-robust pooled model as
+        # the headline: it has the same coefficients as the HC3 version but
+        # standard errors that account for repeated observations per country.
+        specifications = _fit_specifications(model_frame, predictors)
+        results = specifications[SPEC_POOLED_CLUSTER]
+        comparison = _specification_comparison(specifications, predictors)
 
         confidence_intervals = results.conf_int()
         coefficients = pd.DataFrame(
@@ -262,7 +359,7 @@ def run_ecological_regression(
                 {
                     "outcome": "log_mmr",
                     "model_type": "OLS",
-                    "covariance_estimator": "HC3",
+                    "covariance_estimator": "cluster(country_iso3)",
                     "n_observations": int(results.nobs),
                     "n_countries": int(model_frame["country_iso3"].nunique()),
                     "year_min": int(model_frame["year"].min()),
@@ -301,6 +398,24 @@ def run_ecological_regression(
 
         model_frame_with_diagnostics.to_parquet(artifacts.regression_dataset_path, index=False)
         coefficients.to_csv(artifacts.coefficients_path, index=False)
+        comparison.to_csv(artifacts.specification_comparison_path, index=False)
+
+        # Within-country coefficients drive the dashboard's scenario panel: asking
+        # "what if this country changed X" is a within-country counterfactual, so
+        # between-country coefficients would be the ecological fallacy in action.
+        within = specifications[SPEC_TWOWAY_FE]
+        within_frame = pd.DataFrame(
+            {
+                "term": ["const"] + predictors,
+                "coefficient": [float(within.params["const"])]
+                + [float(within.params[p]) for p in predictors],
+                "std_error": [float(within.bse["const"])]
+                + [float(within.bse[p]) for p in predictors],
+                "p_value": [float(within.pvalues["const"])]
+                + [float(within.pvalues[p]) for p in predictors],
+            }
+        )
+        within_frame.to_csv(artifacts.within_country_coefficients_path, index=False)
         summary_table.to_csv(artifacts.model_summary_csv_path, index=False)
         artifacts.model_summary_text_path.write_text(model_summary_text, encoding="utf-8")
         vif_table.to_csv(artifacts.vif_path, index=False)

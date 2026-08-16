@@ -48,8 +48,18 @@ def load_dashboard_datasets(settings: Settings) -> DashboardDatasets:
         raise DashboardDataError("Failed loading dashboard parquet artifacts") from exc
 
     try:
+        # Within-country (two-way fixed effects) coefficients drive the scenario
+        # panel. The pooled cross-sectional coefficients answer a different
+        # question and overstate every slider's effect by roughly 3-4x, because
+        # they absorb permanent differences between rich and poor countries.
+        within_country_path = (
+            settings.processed_data_dir
+            / "ecological_regression_within_country_coefficients.csv"
+        )
         regression_coefficients = pd.read_csv(
-            _required_file(settings.processed_data_dir / "ecological_regression_coefficients.csv")
+            within_country_path
+            if within_country_path.exists()
+            else _required_file(settings.processed_data_dir / "ecological_regression_coefficients.csv")
         )
         regression_model_summary = pd.read_csv(
             _required_file(settings.processed_data_dir / "ecological_regression_model_summary.csv")

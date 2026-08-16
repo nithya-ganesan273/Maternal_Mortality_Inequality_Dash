@@ -89,6 +89,65 @@ def _predict_mmr_from_coefficients(
     return mmr_value, note
 
 
+def _within_country_scenario(
+    coefficients: dict[str, float],
+    *,
+    observed_mmr: float,
+    deltas: dict[str, float],
+) -> ScenarioPrediction:
+    """
+    Scale an observed MMR by the modelled effect of changing predictors.
+
+    Because the outcome is log(MMR), a change of ``d`` in predictor ``x`` scales
+    mortality by ``exp(beta_x * d)`` regardless of the starting level. Terms
+    absent from the fitted model contribute nothing and are reported.
+    """
+    if not coefficients:
+        return ScenarioPrediction(
+            baseline_mmr=observed_mmr,
+            adjusted_mmr=None,
+            percent_change=None,
+            note="Regression coefficients were not available.",
+        )
+
+    log_multiplier = 0.0
+    missing: list[str] = []
+    for term, delta in deltas.items():
+        if term in coefficients:
+            log_multiplier += coefficients[term] * delta
+        elif abs(delta) > 0:
+            missing.append(term.replace("_", " "))
+
+    adjusted = float(observed_mmr * math.exp(log_multiplier))
+    if not np.isfinite(adjusted):
+        return ScenarioPrediction(
+            baseline_mmr=observed_mmr,
+            adjusted_mmr=None,
+            percent_change=None,
+            note="Model prediction returned a non-finite value.",
+        )
+
+    note = (
+        "Baseline is the observed maternal mortality ratio for the selected "
+        "country-year. The adjustment applies within-country regression "
+        "coefficients to the change in each slider, so it estimates how this "
+        "country's own mortality would move - not what a different country with "
+        "these characteristics would look like."
+    )
+    if "skilled_birth_attendance" not in coefficients:
+        note += " Skilled birth attendance was not included in the fitted model."
+    if missing:
+        note += f" Ignored predictors absent from the model: {', '.join(missing)}."
+
+    percent_change = float(((adjusted - observed_mmr) / observed_mmr) * 100.0)
+    return ScenarioPrediction(
+        baseline_mmr=observed_mmr,
+        adjusted_mmr=adjusted,
+        percent_change=percent_change,
+        note=note,
+    )
+
+
 def predict_adjusted_mmr(
     row: pd.Series | None,
     coefficient_table: pd.DataFrame,
@@ -110,6 +169,7 @@ def predict_adjusted_mmr(
 
     coefficients = coefficient_map(coefficient_table)
 
+    observed_mmr = _to_float(row.get("mmr"))
     gdp_per_capita = _to_float(row.get("gdp_per_capita"))
     urban_population_pct = _to_float(row.get("urban_population_pct"))
     baseline_literacy = _to_float(row.get("female_literacy_rate")) or fallback_literacy
@@ -119,6 +179,26 @@ def predict_adjusted_mmr(
     scenario_literacy = _to_float(literacy_value) or baseline_literacy
     scenario_health = _to_float(health_expenditure_value) or baseline_health
     scenario_skilled = _to_float(skilled_birth_value) or baseline_skilled
+
+    # Preferred path: anchor on the country's OBSERVED mortality and apply the
+    # within-country coefficients to the slider deltas only.
+    #
+    # The alternative - predicting an absolute level from the model intercept -
+    # commits the ecological fallacy this dashboard warns about: it answers "what
+    # would a country with these characteristics look like" (a between-country
+    # comparison) when the question being asked is "what if THIS country
+    # changed" (a within-country counterfactual). Anchoring on the observed value
+    # also avoids showing a baseline that disagrees with the map on the same page.
+    if observed_mmr is not None and observed_mmr > 0:
+        return _within_country_scenario(
+            coefficients,
+            observed_mmr=observed_mmr,
+            deltas={
+                "female_literacy_rate": scenario_literacy - baseline_literacy,
+                "health_expenditure_per_capita": scenario_health - baseline_health,
+                "skilled_birth_attendance": scenario_skilled - baseline_skilled,
+            },
+        )
 
     baseline_pred, baseline_note = _predict_mmr_from_coefficients(
         coefficients,
